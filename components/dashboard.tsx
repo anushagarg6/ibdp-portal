@@ -9,7 +9,10 @@ type ClassItem = {
   subject: string;
   group: string;
   selectedStudent: string | null;
+  selectedStudentId?: string | null;
   canEdit: boolean;
+  canReassign?: boolean;
+  enrolledStudents?: { id: string; name: string }[];
   update: { covered: string; homework: string; absentNames: string } | null;
   attachments: { id: string; kind: "image" | "pdf" | "word" }[];
 };
@@ -78,6 +81,7 @@ export default function Dashboard() {
 function ClassCard({ item, onSaved }: { item: ClassItem; onSaved: () => void }) {
   const [busy, setBusy] = useState(false);
   const [uploadBusy, setUploadBusy] = useState(false);
+  const [reassignBusy, setReassignBusy] = useState(false);
   const [attachment, setAttachment] = useState<File | null>(null);
   const [message, setMessage] = useState("");
 
@@ -101,6 +105,28 @@ function ClassCard({ item, onSaved }: { item: ClassItem; onSaved: () => void }) 
     setBusy(false);
     if (response.ok) { setMessage("Saved"); onSaved(); }
     else setMessage("Could not save. Please try again.");
+  }
+
+  async function handleReassign(targetStudentId: string) {
+    setReassignBusy(true);
+    setMessage("");
+    const response = await fetch("/api/reassign", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        date: item.date,
+        group: item.group,
+        studentId: targetStudentId
+      })
+    });
+    const data = await response.json().catch(() => ({}));
+    setReassignBusy(false);
+    if (response.ok) {
+      setMessage(`Reassigned lead to ${data.studentName ?? "student"}`);
+      onSaved();
+    } else {
+      setMessage(typeof data.error === "string" ? data.error : "Could not reassign lead.");
+    }
   }
 
   async function uploadAttachment() {
@@ -131,7 +157,32 @@ function ClassCard({ item, onSaved }: { item: ClassItem; onSaved: () => void }) 
           <h2>{item.subject}</h2>
           <div className="meta">Period {item.period} · {item.group}</div>
         </div>
-        <span className="badge">{item.selectedStudent ? `${item.selectedStudent} updates` : "Awaiting assignment"}</span>
+        <div className="badge-block">
+          <span className="badge">{item.selectedStudent ? `${item.selectedStudent} updates` : "Awaiting assignment"}</span>
+          {item.canReassign && item.enrolledStudents && item.enrolledStudents.length > 0 && (
+            <div className="reassign-control">
+              <label htmlFor={`reassign-${item.group}-${item.period}`} className="sr-only">Reassign lead</label>
+              <select
+                id={`reassign-${item.group}-${item.period}`}
+                className="reassign-select"
+                disabled={reassignBusy}
+                value={item.selectedStudentId ?? ""}
+                onChange={(event) => {
+                  if (event.target.value && event.target.value !== (item.selectedStudentId ?? "")) {
+                    void handleReassign(event.target.value);
+                  }
+                }}
+              >
+                <option value="" disabled>Reassign lead to…</option>
+                {item.enrolledStudents.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.name} {student.id === item.selectedStudentId ? "(Current lead)" : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
       </div>
       <div className="fields">
         <label className="field full">What was covered?<textarea name="covered" maxLength={2000} defaultValue={item.update?.covered ?? ""} readOnly={!item.canEdit} placeholder={item.canEdit ? "Add the topics and work completed" : "No update yet"} /></label>

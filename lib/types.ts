@@ -4,3 +4,5 @@ export type RotationEntry = { studentId: string; groupCode: string; selectedAt: 
 export type Session =
   | { role: "teacher"; exp: number }
   | { role: "student"; exp: number; studentId: string; studentName: string; section: "A" | "B" };
+
+export type EnrolledStudent = { id: string; name: string };
