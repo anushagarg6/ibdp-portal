@@ -41,6 +41,21 @@ function parseRowTimetable(records: Record<string, string>[]): TimetableRow[] {
 const ignoredSubjects = new Set(["break", "homeroom", "reading time and reflection"]);
 const languageAcquisitionSubjects = ["French AB", "French B", "German B", "German AB", "Hindi B"];
 
+export function normalizeSubject(rawSubject: string): string {
+  const trimmed = rawSubject.replace(/\s+/g, " ").trim();
+  if (!trimmed) return "";
+
+  if (/^(physics|phy)\b/i.test(trimmed)) {
+    return "Physics";
+  }
+
+  let cleaned = trimmed;
+  cleaned = cleaned.replace(/\s*\(([abAB])\)\s*(-?\s*[abAB])?$/i, "");
+  cleaned = cleaned.replace(/\s*-\s*[abAB]$/i, "");
+
+  return cleaned.trim();
+}
+
 export function parseSectionTimetableCsv(csv: string, date: string): TimetableRow[] {
   const records: Record<string, string>[] = parse(csv, { columns: true, skip_empty_lines: false, bom: true, trim: true });
   const headers = records.length ? Object.keys(records[0]).map((header) => header.trim().toUpperCase()) : [];
@@ -51,6 +66,7 @@ export function parseSectionTimetableCsv(csv: string, date: string): TimetableRo
     return entry.split(/\s*\/\s*/)
       .map((subject) => subject.replace(/\s+/g, " ").trim())
       .filter((subject) => subject && !ignoredSubjects.has(subject.toLowerCase()))
+      .map((subject) => normalizeSubject(subject))
       .flatMap((subject) => subject.toLowerCase() === "language acquisition" ? languageAcquisitionSubjects : [subject])
       .map((subject) => ({
         date,
@@ -63,5 +79,6 @@ export function parseSectionTimetableCsv(csv: string, date: string): TimetableRo
 }
 
 export function subjectToGroupCode(subject: string) {
-  return subject.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/&/g, " AND ").replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  const normalized = normalizeSubject(subject);
+  return normalized.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/&/g, " AND ").replace(/[^A-Z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
