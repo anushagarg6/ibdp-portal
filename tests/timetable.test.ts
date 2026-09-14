@@ -24,8 +24,12 @@ describe("subject normalization", () => {
   });
 
   it("normalizes general section annotations while preserving block codes", () => {
+    expect(normalizeSubject("English FA")).toBe("English A");
+    expect(normalizeSubject("Math AA (V)")).toBe("Math AA");
+    expect(normalizeSubject("Computer Science (R5)")).toBe("Computer Science");
+    expect(normalizeSubject("Eco (B10)")).toBe("Economics");
     expect(normalizeSubject("Business Management (A)")).toBe("Business Management");
-    expect(normalizeSubject("Econ (B)")).toBe("Econ");
+    expect(normalizeSubject("Econ (B)")).toBe("Economics");
     expect(normalizeSubject("Visual Arts (B7)")).toBe("Visual Arts (B7)");
     expect(normalizeSubject("Hindi (B1)")).toBe("Hindi (B1)");
   });

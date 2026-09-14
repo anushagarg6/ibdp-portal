@@ -42,14 +42,39 @@ const ignoredSubjects = new Set(["break", "homeroom", "reading time and reflecti
 const languageAcquisitionSubjects = ["French AB", "French B", "German B", "German AB", "Hindi B"];
 
 export function normalizeSubject(rawSubject: string): string {
-  const trimmed = rawSubject.replace(/\s+/g, " ").trim();
+  const trimmed = rawSubject.replace(/^[(\s]+/, "").replace(/[\s/]+$/, "").replace(/\s+/g, " ").trim();
   if (!trimmed) return "";
+
+  if (/^english(\s+(a|fa))?\b/i.test(trimmed)) {
+    return "English A";
+  }
 
   if (/^(physics|phy)\b/i.test(trimmed)) {
     return "Physics";
   }
 
+  if (/^math\s*aa\b/i.test(trimmed)) {
+    return "Math AA";
+  }
+
+  if (/^math\s*ai\b/i.test(trimmed)) {
+    return "Math AI";
+  }
+
+  if (/^(computer\s*science|cs)\b/i.test(trimmed)) {
+    return "Computer Science";
+  }
+
+  if (/^(economics|econ|eco)\b/i.test(trimmed)) {
+    return "Economics";
+  }
+
+  if (/^(biology|bio)\b/i.test(trimmed)) {
+    return "Bio";
+  }
+
   let cleaned = trimmed;
+  cleaned = cleaned.replace(/\s*\(([rR]\d+|[vV]|[abAB])\)\s*(-?\s*[abAB])?$/i, "");
   cleaned = cleaned.replace(/\s*\(([abAB])\)\s*(-?\s*[abAB])?$/i, "");
   cleaned = cleaned.replace(/\s*-\s*[abAB]$/i, "");
 
