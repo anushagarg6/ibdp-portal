@@ -23,6 +23,26 @@ function localDate() {
   return `${get("year")}-${get("month")}-${get("day")}`;
 }
 
+function formatDateLabel(dateString: string) {
+  if (!dateString) return "";
+  const parts = dateString.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateString;
+  const [year, month, day] = parts;
+  const d = new Date(year, month - 1, day);
+  return new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" }).format(d);
+}
+
+function shiftDate(dateString: string, days: number) {
+  const parts = dateString.split("-").map(Number);
+  if (parts.length !== 3 || parts.some(isNaN)) return dateString;
+  const [year, month, day] = parts;
+  const d = new Date(year, month - 1, day + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
 export default function Dashboard() {
   const [date, setDate] = useState(localDate);
   const [items, setItems] = useState<ClassItem[]>([]);
@@ -63,17 +83,33 @@ export default function Dashboard() {
       </header>
       <section className="hero">
         <h1>Class updates</h1>
-        <p className="lede">View classwork, homework, and absences for your section. Students enrolled in a subject can add or edit its update.</p>
+        <p className="lede">View classwork, homework, and absences for any day. All past entries are stored permanently and can be reviewed anytime.</p>
       </section>
       <div className="date-row">
-        <label htmlFor="date"><strong>School day</strong></label>
-        <input id="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+        <div className="date-controls">
+          <button className="button secondary date-btn" type="button" onClick={() => setDate((d) => shiftDate(d, -1))}>
+            ← Previous day
+          </button>
+          <div className="date-input-wrap">
+            <label htmlFor="date"><strong>School day</strong></label>
+            <input id="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          </div>
+          <button className="button secondary date-btn" type="button" onClick={() => setDate(localDate())}>
+            Today
+          </button>
+          <button className="button secondary date-btn" type="button" onClick={() => setDate((d) => shiftDate(d, 1))}>
+            Next day →
+          </button>
+        </div>
+        <div className="date-heading">
+          Viewing updates for <strong>{formatDateLabel(date)}</strong>
+        </div>
       </div>
       {loading ? <div className="empty">Loading classes…</div> : items.length ? (
         <section className="grid">
           {items.map((item) => <ClassCard key={`${item.date}-${item.group}-${item.period}`} item={item} onSaved={() => load(date)} />)}
         </section>
-      ) : <div className="empty">No classes are listed for this date. Check the timetable sheet or choose another day.</div>}
+      ) : <div className="empty">No classes listed for {formatDateLabel(date)}. Select another date to view historical updates.</div>}
     </main>
   );
 }
