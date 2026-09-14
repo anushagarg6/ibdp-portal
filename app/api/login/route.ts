@@ -7,7 +7,7 @@ import { hasAllowedOrigin } from "@/lib/request-security";
 
 const schema = z.object({
   studentName: z.string().trim().max(100).optional().default(""),
-  accessCode: z.string().min(8).max(128)
+  accessCode: z.string().min(1).max(128)
 });
 const LIMIT = 8;
 const WINDOW_MS = 15 * 60 * 1000;
@@ -36,7 +36,11 @@ export async function POST(request: Request) {
       console.error("Student login lookup failed", studentError.message);
       return NextResponse.json({ error: "Login temporarily unavailable" }, { status: 503 });
     }
-    const student = students?.find((item) => item.name.localeCompare(parsed.data.studentName, undefined, { sensitivity: "base" }) === 0);
+    const inputName = parsed.data.studentName.trim().toLowerCase();
+    const student = students?.find((item) => {
+      const dbName = item.name.trim().toLowerCase();
+      return dbName === inputName || dbName.split(/\s+/)[0] === inputName || inputName.startsWith(dbName);
+    });
     if (student?.access_code_hash && (student.section === "A" || student.section === "B") && await compare(parsed.data.accessCode, student.access_code_hash)) {
       identity = { role: "student", studentId: student.id, studentName: student.name, section: student.section };
     }
