@@ -63,6 +63,18 @@ create table if not exists public.daily_runs (
   finished_at timestamptz
 );
 
+create table if not exists public.daily_timetable (
+  id uuid primary key default gen_random_uuid(),
+  class_date date not null,
+  period text not null check (char_length(period) between 1 and 20),
+  subject text not null,
+  group_code text not null references public.subject_groups(code),
+  section text check (section in ('A', 'B')),
+  created_at timestamptz not null default now(),
+  unique (class_date, period, group_code)
+);
+create index if not exists daily_timetable_date_idx on public.daily_timetable (class_date);
+
 create table if not exists public.login_attempts (
   id bigint generated always as identity primary key,
   ip_address text not null check (char_length(ip_address) <= 100),
