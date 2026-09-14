@@ -1,5 +1,5 @@
--- Complete Supabase setup script using FIRST NAMES ONLY for all students.
--- Copy and run this entire script in the Supabase SQL Editor.
+-- Safe Supabase Migration: Update Student Names to First Name Only
+-- Preserves existing student IDs and class update history to avoid Foreign Key errors.
 
 create extension if not exists pgcrypto;
 
@@ -41,14 +41,31 @@ insert into public.subject_groups (code, display_name) values
   ('MATH-AI-B', 'Math AI · Section B')
 on conflict (code) do update set display_name = excluded.display_name;
 
--- 2. Clear old data to prevent duplicate or full name conflicts
-delete from public.student_subjects;
-delete from public.rotation_history;
-delete from public.students;
+-- 2. Safely rename existing full-name student records to First Name Only
+update public.students set name = 'Arnav', section = 'A', active = true, access_code_hash = crypt('arnav123', gen_salt('bf', 10)) where lower(name) in ('arnav', 'arnav virmani');
+update public.students set name = 'Aayushi', section = 'A', active = true, access_code_hash = crypt('aayushi123', gen_salt('bf', 10)) where lower(name) in ('aayushi', 'aayushi sharma');
+update public.students set name = 'Dhruv', section = 'A', active = true, access_code_hash = crypt('dhruv123', gen_salt('bf', 10)) where lower(name) in ('dhruv', 'dhruv vason');
+update public.students set name = 'Sidharth', section = 'A', active = true, access_code_hash = crypt('sidharth123', gen_salt('bf', 10)) where lower(name) in ('sidharth', 'sidharth modi');
+update public.students set name = 'Anusha', section = 'A', active = true, access_code_hash = crypt('anusha123', gen_salt('bf', 10)) where lower(name) in ('anusha');
+update public.students set name = 'Saanvii', section = 'A', active = true, access_code_hash = crypt('saanvii123', gen_salt('bf', 10)) where lower(name) in ('saanvii', 'saanvii saluja');
+update public.students set name = 'Arhaan', section = 'A', active = true, access_code_hash = crypt('arhaan123', gen_salt('bf', 10)) where lower(name) in ('arhaan', 'arhaan sharma');
 
--- 3. Insert all 19 students using First Names Only
+update public.students set name = 'Arjun', section = 'B', active = true, access_code_hash = crypt('arjun123', gen_salt('bf', 10)) where lower(name) in ('arjun', 'arjun raina');
+update public.students set name = 'Ayaansh', section = 'B', active = true, access_code_hash = crypt('ayaansh123', gen_salt('bf', 10)) where lower(name) in ('ayaansh', 'ayaansh gautam');
+update public.students set name = 'Vishwam', section = 'B', active = true, access_code_hash = crypt('vishwam123', gen_salt('bf', 10)) where lower(name) in ('vishwam');
+update public.students set name = 'Gouransh', section = 'B', active = true, access_code_hash = crypt('gouransh123', gen_salt('bf', 10)) where lower(name) in ('gouransh');
+update public.students set name = 'Aakanksha', section = 'B', active = true, access_code_hash = crypt('aakanksha123', gen_salt('bf', 10)) where lower(name) in ('aakanksha', 'aakanksha kamti');
+update public.students set section = 'B', active = true, access_code_hash = crypt('pratap123', gen_salt('bf', 10)) where lower(name) in ('pratap', 'bhanu pratap');
+update public.students set name = 'Pratap', section = 'B', active = true, access_code_hash = crypt('pratap123', gen_salt('bf', 10)) where lower(name) in ('pratap', 'bhanu pratap');
+update public.students set name = 'Aliya', section = 'B', active = true, access_code_hash = crypt('aliya123', gen_salt('bf', 10)) where lower(name) in ('aliya');
+update public.students set name = 'Kiaan', section = 'B', active = true, access_code_hash = crypt('kiaan123', gen_salt('bf', 10)) where lower(name) in ('kiaan');
+update public.students set name = 'Rubani', section = 'B', active = true, access_code_hash = crypt('rubani123', gen_salt('bf', 10)) where lower(name) in ('rubani');
+update public.students set name = 'Priya', section = 'B', active = true, access_code_hash = crypt('priya123', gen_salt('bf', 10)) where lower(name) in ('priya', 'priyh', 'bhanu priya');
+update public.students set name = 'Tanjot', section = 'B', active = true, access_code_hash = crypt('tanjot123', gen_salt('bf', 10)) where lower(name) in ('tanjot');
+update public.students set name = 'Guransh', section = 'B', active = true, access_code_hash = crypt('guransh123', gen_salt('bf', 10)) where lower(name) in ('guransh', 'guransh singh soni');
+
+-- 3. Upsert any students that do not exist yet
 insert into public.students (name, section, active, access_code_hash) values
-  -- DP1A (Section A)
   ('Arnav', 'A', true, crypt('arnav123', gen_salt('bf', 10))),
   ('Aayushi', 'A', true, crypt('aayushi123', gen_salt('bf', 10))),
   ('Dhruv', 'A', true, crypt('dhruv123', gen_salt('bf', 10))),
@@ -56,8 +73,6 @@ insert into public.students (name, section, active, access_code_hash) values
   ('Anusha', 'A', true, crypt('anusha123', gen_salt('bf', 10))),
   ('Saanvii', 'A', true, crypt('saanvii123', gen_salt('bf', 10))),
   ('Arhaan', 'A', true, crypt('arhaan123', gen_salt('bf', 10))),
-
-  -- DP1B (Section B)
   ('Arjun', 'B', true, crypt('arjun123', gen_salt('bf', 10))),
   ('Ayaansh', 'B', true, crypt('ayaansh123', gen_salt('bf', 10))),
   ('Vishwam', 'B', true, crypt('vishwam123', gen_salt('bf', 10))),
@@ -69,9 +84,22 @@ insert into public.students (name, section, active, access_code_hash) values
   ('Rubani', 'B', true, crypt('rubani123', gen_salt('bf', 10))),
   ('Priya', 'B', true, crypt('priya123', gen_salt('bf', 10))),
   ('Tanjot', 'B', true, crypt('tanjot123', gen_salt('bf', 10))),
-  ('Guransh', 'B', true, crypt('guransh123', gen_salt('bf', 10)));
+  ('Guransh', 'B', true, crypt('guransh123', gen_salt('bf', 10)))
+on conflict ((lower(name))) do update set
+  section = excluded.section,
+  active = true,
+  access_code_hash = excluded.access_code_hash;
 
--- 4. Map subjects for each student
+-- 4. Refresh subject memberships for all students
+delete from public.student_subjects
+where student_id in (
+  select id from public.students
+  where lower(name) in (
+    'arnav', 'aayushi', 'dhruv', 'sidharth', 'anusha', 'saanvii', 'arhaan',
+    'arjun', 'ayaansh', 'vishwam', 'gouransh', 'aakanksha', 'pratap', 'aliya', 'kiaan', 'rubani', 'priya', 'tanjot', 'guransh'
+  )
+);
+
 insert into public.student_subjects (student_id, group_code)
 select s.id, m.group_code
 from (values
