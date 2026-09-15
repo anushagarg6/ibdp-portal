@@ -4,12 +4,21 @@ import { getTimetable } from "@/lib/timetable";
 import type { Session, EnrolledStudent } from "@/lib/types";
 import { canEditClass, canReassignClass, canViewClass } from "@/lib/authorization";
 import { attachmentKindFromPath } from "@/lib/image-upload";
+import { ensureDailyRotations } from "@/lib/rotation-service";
 
 export async function getDayData(date: string, session: Session) {
   const fullTimetable = await getTimetable(date);
   const timetable = fullTimetable.filter((row) => canViewClass(session, row.section));
   const groups = [...new Set(timetable.map((row) => row.group))];
   if (!groups.length) return [];
+
+  // Auto-assign student leads for any unassigned subject groups in today's updated timetable
+  try {
+    await ensureDailyRotations(date, groups);
+  } catch {
+    // Non-blocking fallback if assignment DB lookup encounters an issue
+  }
+
   const database = db();
   const [
     { data: rotations, error: rotationError },

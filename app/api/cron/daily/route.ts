@@ -4,8 +4,7 @@ import { env } from "@/lib/env";
 import { db } from "@/lib/db";
 import { dateInTimeZone } from "@/lib/date";
 import { getTimetable } from "@/lib/timetable";
-import { chooseLeastRecentlySelected } from "@/lib/rotation";
-import type { RotationEntry, Student } from "@/lib/types";
+import { ensureDailyRotations } from "@/lib/rotation-service";
 
 export const maxDuration = 30;
 
@@ -47,40 +46,18 @@ export async function GET(request: Request) {
     );
     if (groupError) throw groupError;
 
-    const [
-      { data: memberships, error: membershipError },
-      { data: historyRows, error: historyError },
-      { data: existingRotations, error: existingRotationError }
-    ] = await Promise.all([
-      database.from("student_subjects").select("group_code, students(id,name,active)").in("group_code", groups),
-      database.from("rotation_history").select("student_id,group_code,selected_at").in("group_code", groups).lt("class_date", date).order("selected_at", { ascending: false }).limit(1000),
-      database.from("rotation_history").select("student_id,group_code").eq("class_date", date).in("group_code", groups)
-    ]);
-    if (membershipError) throw membershipError;
-    if (historyError) throw historyError;
-    if (existingRotationError) throw existingRotationError;
+    await ensureDailyRotations(date, groups);
 
-    const studentMap = new Map<string, Student>();
-    for (const membership of memberships ?? []) {
-      const student = membership.students as unknown as { id: string; name: string; active: boolean } | null;
-      if (!student?.active) continue;
-      const existing = studentMap.get(student.id) ?? { id: student.id, name: student.name, groupCodes: [] };
-      existing.groupCodes.push(membership.group_code);
-      studentMap.set(student.id, existing);
-    }
-    const history: RotationEntry[] = (historyRows ?? []).map((row) => ({ studentId: row.student_id, groupCode: row.group_code, selectedAt: row.selected_at }));
-    const selections = groups.map((group) => {
-      const existing = existingRotations?.find((rotation) => rotation.group_code === group);
-      return { group, student: existing ? studentMap.get(existing.student_id) ?? null : chooseLeastRecentlySelected([...studentMap.values()], history, group), existing: Boolean(existing) };
-    });
-    const newSelections = selections.filter((selection) => !selection.existing && selection.student);
-    if (newSelections.length) {
-      const { error: insertError } = await database.from("rotation_history").insert(newSelections.map(({ group, student }) => ({ class_date: date, group_code: group, student_id: student!.id })));
-      if (insertError) throw insertError;
-    }
+    const { data: rotationRows } = await database
+      .from("rotation_history")
+      .select("group_code, students(name)")
+      .eq("class_date", date)
+      .in("group_code", groups);
+
+    const rotationMap = new Map((rotationRows ?? []).map((r) => [r.group_code, (r.students as unknown as { name: string } | null)?.name ?? "Unassigned"]));
 
     const rows = classes.map((item) => {
-      const name = selections.find((selection) => selection.group === item.group)?.student?.name ?? "Unassigned";
+      const name = rotationMap.get(item.group) ?? "Unassigned";
       return `<tr><td style="padding:10px;border-bottom:1px solid #ddd">${escapeHtml(item.period)}</td><td style="padding:10px;border-bottom:1px solid #ddd">${escapeHtml(item.subject)}</td><td style="padding:10px;border-bottom:1px solid #ddd">${escapeHtml(item.group)}</td><td style="padding:10px;border-bottom:1px solid #ddd"><strong>${escapeHtml(name)}</strong></td></tr>`;
     }).join("");
     const resend = new Resend(config.RESEND_API_KEY);
@@ -97,8 +74,7 @@ export async function GET(request: Request) {
       ok: true,
       date,
       classCount: classes.length,
-      assignedGroupCount: selections.filter((selection) => selection.student).length,
-      unassignedGroups: selections.filter((selection) => !selection.student).map((selection) => selection.group)
+      assignedGroupCount: rotationMap.size
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
