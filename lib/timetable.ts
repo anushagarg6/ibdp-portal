@@ -14,7 +14,10 @@ export async function getTimetable(date: string): Promise<TimetableRow[]> {
   const database = db();
   const todayStr = getTodayInAppTimeZone();
 
-  // 1. If viewing a past date, first attempt to read from daily_timetable snapshot in Supabase
+  // -------------------------------------------------------------
+  // 1. PAST DATES (date < todayStr): ONLY use saved DB snapshots or historical records.
+  //    NEVER fetch live Google Sheets matrix for a past date!
+  // -------------------------------------------------------------
   if (date < todayStr) {
     try {
       const { data: savedRows, error } = await database
@@ -23,21 +26,103 @@ export async function getTimetable(date: string): Promise<TimetableRow[]> {
         .eq("class_date", date)
         .order("period");
 
+      const { data: rotRows } = await database
+        .from("rotation_history")
+        .select("group_code")
+        .eq("class_date", date);
+
+      const rotGroups = new Set((rotRows ?? []).map((r) => r.group_code));
+      const { data: updateRows } = await database
+        .from("class_updates")
+        .select("period, group_code")
+        .eq("class_date", date);
+
+      const updateGroups = new Set((updateRows ?? []).map((u) => u.group_code));
+
       if (!error && savedRows && savedRows.length > 0) {
-        return savedRows.map((r) => ({
-          date: r.class_date,
-          period: String(r.period),
-          subject: r.subject,
-          group: r.group_code,
-          section: (r.section as "A" | "B") ?? undefined
-        }));
+        // If rotation/updates exist for this past date, filter out any rows in daily_timetable that were incorrectly
+        // snapshot-overwritten from a live CSV fetch on a later date.
+        if (rotGroups.size > 0 || updateGroups.size > 0) {
+          const validSavedRows = savedRows.filter((r) => rotGroups.has(r.group_code) || updateGroups.has(r.group_code));
+          if (validSavedRows.length > 0) {
+            return validSavedRows.map((r) => ({
+              date: r.class_date,
+              period: String(r.period),
+              subject: r.subject,
+              group: r.group_code,
+              section: (r.section as "A" | "B") ?? undefined
+            }));
+          }
+        } else {
+          return savedRows.map((r) => ({
+            date: r.class_date,
+            period: String(r.period),
+            subject: r.subject,
+            group: r.group_code,
+            section: (r.section as "A" | "B") ?? undefined
+          }));
+        }
+      }
+
+      // Reconstruct timetable from rotation_history and class_updates for this past date
+      const groupPeriods = new Map<string, string>();
+      for (const u of updateRows ?? []) {
+        groupPeriods.set(u.group_code, String(u.period));
+      }
+      for (const r of rotRows ?? []) {
+        if (!groupPeriods.has(r.group_code)) {
+          groupPeriods.set(r.group_code, "1");
+        }
+      }
+
+      if (groupPeriods.size > 0) {
+        const groupCodes = Array.from(groupPeriods.keys());
+        const { data: subjectGroups } = await database
+          .from("subject_groups")
+          .select("code, display_name")
+          .in("code", groupCodes);
+
+        const nameMap = new Map((subjectGroups ?? []).map((g) => [g.code, g.display_name]));
+
+        const reconstructedRows: TimetableRow[] = groupCodes.map((code) => {
+          const subject = nameMap.get(code) ?? code;
+          const section = code.endsWith("-B") ? "B" : code.endsWith("-A") ? "A" : undefined;
+          return {
+            date,
+            period: groupPeriods.get(code) ?? "1",
+            subject,
+            group: code,
+            section
+          };
+        });
+
+        // Save reconstructed snapshot so future lookups for this past date are fast & permanent
+        try {
+          const records = reconstructedRows.map((r) => ({
+            class_date: date,
+            period: r.period,
+            subject: r.subject,
+            group_code: r.group,
+            section: r.section ?? null
+          }));
+          await database.from("daily_timetable").upsert(records, { onConflict: "class_date,period,group_code" });
+        } catch {
+          // Non-blocking fallback
+        }
+
+        return reconstructedRows;
       }
     } catch {
-      // Proceed if table lookup fails
+      // Non-blocking
     }
+
+    // Return empty array for past dates that have no recorded schedule or updates
+    return [];
   }
 
-  // 2. Fetch live CSV from Google Sheets
+  // -------------------------------------------------------------
+  // 2. TODAY OR FUTURE DATES (date >= todayStr): Fetch live CSV from Google Sheets
+  // -------------------------------------------------------------
   let rows: TimetableRow[] = [];
   try {
     const config = env();
@@ -53,55 +138,12 @@ export async function getTimetable(date: string): Promise<TimetableRow[]> {
       }
     }
   } catch {
-    // If Google Sheet fetch fails, rows remains empty
+    // Non-blocking fallback if fetch fails
   }
 
-  // 3. For past dates, if live Google Sheet was overwritten/deleted, reconstruct missing past classes from class_updates
-  if (date < todayStr) {
-    try {
-      const { data: pastUpdates } = await database
-        .from("class_updates")
-        .select("period, group_code")
-        .eq("class_date", date);
-
-      if (pastUpdates && pastUpdates.length > 0) {
-        const existingGroupPeriods = new Set(rows.map((r) => `${r.period}:${r.group}`));
-        const missingGroupCodes = [...new Set(pastUpdates.filter((u) => !existingGroupPeriods.has(`${u.period}:${u.group_code}`)).map((u) => u.group_code))];
-
-        if (missingGroupCodes.length > 0) {
-          const { data: subjectGroups } = await database
-            .from("subject_groups")
-            .select("code, display_name")
-            .in("code", missingGroupCodes);
-
-          const nameMap = new Map((subjectGroups ?? []).map((g) => [g.code, g.display_name]));
-
-          for (const u of pastUpdates) {
-            const key = `${u.period}:${u.group_code}`;
-            if (!existingGroupPeriods.has(key)) {
-              existingGroupPeriods.add(key);
-              const subjectName = nameMap.get(u.group_code) ?? u.group_code;
-              const section = u.group_code.endsWith("-B") ? "B" : u.group_code.endsWith("-A") ? "A" : undefined;
-              rows.push({
-                date,
-                period: String(u.period),
-                subject: subjectName,
-                group: u.group_code,
-                section
-              });
-            }
-          }
-        }
-      }
-    } catch {
-      // Proceed with current rows if historical reconstruction fails
-    }
-  }
-
-  // 4. Save/update snapshot in daily_timetable in Supabase so historical schedule stays frozen and preserved
+  // Snapshot today's timetable into daily_timetable table in Supabase
   if (rows.length > 0) {
     try {
-      // Ensure subject groups exist for foreign key constraints
       const uniqueGroups = Array.from(
         new Map(rows.map((r) => [r.group, { code: r.group, display_name: r.subject }])).values()
       );
@@ -117,7 +159,7 @@ export async function getTimetable(date: string): Promise<TimetableRow[]> {
 
       await database.from("daily_timetable").upsert(records, { onConflict: "class_date,period,group_code" });
     } catch {
-      // Ignore upsert error if table is not yet migrated in Supabase
+      // Non-blocking fallback
     }
   }
 
