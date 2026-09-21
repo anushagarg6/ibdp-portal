@@ -40,28 +40,13 @@ export async function getTimetable(date: string): Promise<TimetableRow[]> {
       const updateGroups = new Set((updateRows ?? []).map((u) => u.group_code));
 
       if (!error && savedRows && savedRows.length > 0) {
-        // If rotation/updates exist for this past date, filter out any rows in daily_timetable that were incorrectly
-        // snapshot-overwritten from a live CSV fetch on a later date.
-        if (rotGroups.size > 0 || updateGroups.size > 0) {
-          const validSavedRows = savedRows.filter((r) => rotGroups.has(r.group_code) || updateGroups.has(r.group_code));
-          if (validSavedRows.length > 0) {
-            return validSavedRows.map((r) => ({
-              date: r.class_date,
-              period: String(r.period),
-              subject: r.subject,
-              group: r.group_code,
-              section: (r.section as "A" | "B") ?? undefined
-            }));
-          }
-        } else {
-          return savedRows.map((r) => ({
-            date: r.class_date,
-            period: String(r.period),
-            subject: r.subject,
-            group: r.group_code,
-            section: (r.section as "A" | "B") ?? undefined
-          }));
-        }
+        return savedRows.map((r) => ({
+          date: r.class_date,
+          period: String(r.period),
+          subject: r.subject,
+          group: r.group_code,
+          section: (r.section as "A" | "B") ?? undefined
+        }));
       }
 
       // Reconstruct timetable from rotation_history and class_updates for this past date
